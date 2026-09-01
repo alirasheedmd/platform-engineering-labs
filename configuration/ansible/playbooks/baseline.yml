@@ -1,0 +1,13 @@
+---
+- name: Configure platform node baseline
+  hosts: platform_nodes
+  become: true
+
+  vars:
+    platform_admin_user: platform
+    platform_timezone: UTC
+
+  roles:
+    - common
+    - ssh_hardening
+    - docker

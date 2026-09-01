@@ -1,0 +1,54 @@
+---
+- name: Refresh APT package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install baseline administration packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+      - unzip
+      - jq
+      - git
+      - htop
+      - tree
+    state: present
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ platform_timezone }}"
+
+- name: Create platform directory
+  ansible.builtin.file:
+    path: /opt/platform
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create platform admin user
+  ansible.builtin.user:
+    name: "{{ platform_admin_user }}"
+    shell: /bin/bash
+    create_home: true
+    groups:
+      - sudo
+    append: true
+
+- name: Install SSH public key for platform admin user
+  ansible.posix.authorized_key:
+    user: "{{ platform_admin_user }}"
+    state: present
+    key: "{{ lookup('file', '/Users/muhammadalirasheed/.ssh/id_ed25519.pub') }}"
+
+- name: Allow platform admin user passwordless sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ platform_admin_user }}"
+    content: "{{ platform_admin_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "/usr/sbin/visudo -cf %s"

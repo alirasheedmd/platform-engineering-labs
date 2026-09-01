@@ -1,0 +1,7 @@
+---
+- name: Configure Docker Swarm managers
+  hosts: swarm_managers
+  become: true
+
+  roles:
+    - swarm

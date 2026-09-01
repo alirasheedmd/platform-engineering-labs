@@ -1,0 +1,7 @@
+---
+- name: Initialize Docker Swarm manager
+  community.docker.docker_swarm:
+    state: present
+    advertise_addr: "{{ swarm_advertise_addr }}"
+    listen_addr: "{{ swarm_advertise_addr }}:2377"
+    data_path_addr: "{{ swarm_advertise_addr }}"
