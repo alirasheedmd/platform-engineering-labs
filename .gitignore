@@ -11,6 +11,8 @@
 crash.log
 crash.*.log
 *.tfplan
+terraform.tfvars
+*.auto.tfvars
 
 # Ansible
 *.retry
