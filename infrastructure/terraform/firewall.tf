@@ -39,4 +39,30 @@ resource "digitalocean_firewall" "platform" {
     protocol              = "icmp"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
+  # Swarm manager/control-plane communication
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "2377"
+    source_addresses = ["10.10.10.0/24"]
+  }
+
+  # Swarm node discovery / gossip
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "7946"
+    source_addresses = ["10.10.10.0/24"]
+  }
+
+  inbound_rule {
+    protocol         = "udp"
+    port_range       = "7946"
+    source_addresses = ["10.10.10.0/24"]
+  }
+
+  # Overlay network VXLAN
+  inbound_rule {
+    protocol         = "udp"
+    port_range       = "4789"
+    source_addresses = ["10.10.10.0/24"]
+  }
 }

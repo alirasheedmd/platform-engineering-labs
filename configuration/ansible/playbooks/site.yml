@@ -1,0 +1,3 @@
+---
+- import_playbook: swarm.yml
+- import_playbook: services.yml

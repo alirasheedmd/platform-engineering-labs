@@ -1,7 +1,63 @@
 ---
-- name: Configure Docker Swarm managers
+- name: Initialize Swarm manager
   hosts: swarm_managers
   become: true
 
-  roles:
-    - swarm
+  tasks:
+    - name: Check current Swarm state
+      ansible.builtin.command:
+        argv:
+          - docker
+          - info
+          - --format
+          - "{% raw %}{{.Swarm.LocalNodeState}}{% endraw %}"
+      register: swarm_state
+      changed_when: false
+
+    - name: Initialize Docker Swarm
+      ansible.builtin.command:
+        argv:
+          - docker
+          - swarm
+          - init
+          - --advertise-addr
+          - "{{ swarm_advertise_addr }}"
+      when: swarm_state.stdout == "inactive"
+
+    - name: Get worker join token
+      ansible.builtin.command:
+        argv:
+          - docker
+          - swarm
+          - join-token
+          - -q
+          - worker
+      register: worker_join_token
+      changed_when: false
+
+
+- name: Join Swarm workers
+  hosts: swarm_workers
+  become: true
+
+  tasks:
+    - name: Check current Swarm state
+      ansible.builtin.command:
+        argv:
+          - docker
+          - info
+          - --format
+          - "{% raw %}{{.Swarm.LocalNodeState}}{% endraw %}"
+      register: swarm_state
+      changed_when: false
+
+    - name: Join worker to Swarm
+      ansible.builtin.command:
+        argv:
+          - docker
+          - swarm
+          - join
+          - --token
+          - "{{ hostvars[groups['swarm_managers'][0]].worker_join_token.stdout }}"
+          - "{{ hostvars[groups['swarm_managers'][0]].swarm_advertise_addr }}:2377"
+      when: swarm_state.stdout == "inactive"

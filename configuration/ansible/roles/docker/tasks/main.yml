@@ -12,7 +12,7 @@
     uris:
       - https://download.docker.com/linux/ubuntu
     suites:
-       - "{{ ansible_facts['distribution_release'] }}"
+      - "{{ ansible_facts['distribution_release'] }}"
     components:
       - stable
     architectures:
@@ -20,10 +20,12 @@
     signed_by: https://download.docker.com/linux/ubuntu/gpg
     state: present
     enabled: true
+  register: docker_repository
 
 - name: Refresh APT cache after adding Docker repository
   ansible.builtin.apt:
     update_cache: true
+  when: docker_repository.changed
 
 - name: Install Docker Engine packages
   ansible.builtin.apt:

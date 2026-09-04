@@ -1,0 +1,58 @@
+---
+- name: Deploy Swarm lab services
+  hosts: swarm_managers
+  become: true
+
+  tasks:
+    - name: Check if platform overlay exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - inspect
+          - platform-overlay
+      register: overlay_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create platform overlay network
+      ansible.builtin.command:
+        argv:
+          - docker
+          - network
+          - create
+          - --driver
+          - overlay
+          - --attachable
+          - --subnet
+          - 10.0.1.0/24
+          - platform-overlay
+      when: overlay_check.rc != 0
+
+    - name: Check if lab-web service exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - service
+          - inspect
+          - lab-web
+      register: lab_web_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create lab-web service
+      ansible.builtin.command:
+        argv:
+          - docker
+          - service
+          - create
+          - --name
+          - lab-web
+          - --replicas
+          - "4"
+          - --network
+          - platform-overlay
+          - --publish
+          - published=8081,target=80
+          - nginx:1.27-alpine
+      when: lab_web_check.rc != 0
