@@ -23,6 +23,14 @@ resource "digitalocean_firewall" "platform" {
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
+ # WireGuard VPN for GitHub Actions deployment access
+
+ inbound_rule {
+  protocol         = "udp"
+  port_range       = "51820"
+  source_addresses = ["0.0.0.0/0", "::/0"]
+ }
+
   outbound_rule {
     protocol              = "tcp"
     port_range            = "1-65535"
