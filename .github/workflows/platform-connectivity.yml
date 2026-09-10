@@ -1,0 +1,64 @@
+name: Platform Connectivity Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  connectivity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools
+
+      - name: Configure WireGuard
+        run: |
+          sudo mkdir -p /etc/wireguard
+
+          echo "${{ secrets.WG_PRIVATE_KEY }}" | \
+            sudo tee /etc/wireguard/wg0.key > /dev/null
+
+          sudo chmod 600 /etc/wireguard/wg0.key
+
+          WG_PRIVATE_KEY=$(sudo cat /etc/wireguard/wg0.key)
+
+          sudo tee /etc/wireguard/wg0.conf > /dev/null <<EOF
+          [Interface]
+          Address = 10.77.0.2/32
+          PrivateKey = ${WG_PRIVATE_KEY}
+
+          [Peer]
+          PublicKey = ${{ secrets.WG_SERVER_PUBLIC_KEY }}
+          Endpoint = ${{ secrets.PLATFORM_MANAGER_PUBLIC_IP }}:51820
+          AllowedIPs = 10.77.0.1/32
+          PersistentKeepalive = 25
+          EOF
+
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+
+      - name: Show WireGuard state
+        run: sudo wg show
+
+      - name: Test VPN reachability
+        run: ping -c 3 10.77.0.1
+
+      - name: Configure deployment SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/platform-lab-deploy
+          chmod 600 ~/.ssh/platform-lab-deploy
+
+          ssh-keyscan -H 10.77.0.1 >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Test SSH over WireGuard
+        run: |
+          ssh \
+            -i ~/.ssh/platform-lab-deploy \
+            platform@10.77.0.1 \
+            'hostname && whoami'
