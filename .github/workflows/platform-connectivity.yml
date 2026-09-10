@@ -53,7 +53,7 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/platform-lab-deploy
           chmod 600 ~/.ssh/platform-lab-deploy
 
-          ssh-keyscan -H 10.77.0.1 >> ~/.ssh/known_hosts
+          echo "${{ secrets.PLATFORM_SSH_KNOWN_HOST }}" > ~/.ssh/known_hosts          
           chmod 600 ~/.ssh/known_hosts
 
       - name: Test SSH over WireGuard
