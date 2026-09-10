@@ -60,3 +60,104 @@ jobs:
       - name: Show image digest
         if: github.event_name == 'push'
         run: echo "Published digest ${{ steps.build.outputs.digest }}"
+
+      - name: Install WireGuard
+        if: github.event_name == 'push'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools
+
+      - name: Configure WireGuard
+        if: github.event_name == 'push'
+        run: |
+          sudo mkdir -p /etc/wireguard
+
+          echo "${{ secrets.WG_PRIVATE_KEY }}" | \
+            sudo tee /etc/wireguard/wg0.key > /dev/null
+
+          sudo chmod 600 /etc/wireguard/wg0.key
+
+          WG_PRIVATE_KEY=$(sudo cat /etc/wireguard/wg0.key)
+
+          sudo tee /etc/wireguard/wg0.conf > /dev/null <<EOF
+          [Interface]
+          Address = 10.77.0.2/32
+          PrivateKey = ${WG_PRIVATE_KEY}
+
+          [Peer]
+          PublicKey = ${{ secrets.WG_SERVER_PUBLIC_KEY }}
+          Endpoint = ${{ secrets.PLATFORM_MANAGER_PUBLIC_IP }}:51820
+          AllowedIPs = 10.77.0.1/32
+          PersistentKeepalive = 25
+          EOF
+
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+
+      - name: Configure deployment SSH
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" \
+            > ~/.ssh/platform-lab-deploy
+          chmod 600 ~/.ssh/platform-lab-deploy
+
+          echo "${{ secrets.PLATFORM_SSH_KNOWN_HOST }}" \
+            > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Authenticate Swarm manager to GHCR
+        if: github.event_name == 'push'
+        run: |
+          printf '%s' "${{ secrets.GHCR_READ_TOKEN }}" | \
+            ssh \
+              -i ~/.ssh/platform-lab-deploy \
+              platform@10.77.0.1 \
+              "sudo -n docker login ghcr.io \
+                -u alirasheedmd \
+                --password-stdin"
+
+      - name: Deploy immutable image to Swarm
+        if: github.event_name == 'push'
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:sha-${GITHUB_SHA}@${IMAGE_DIGEST}"
+
+          echo "Deploying ${IMAGE}"
+
+          ssh \
+            -i ~/.ssh/platform-lab-deploy \
+            platform@10.77.0.1 \
+            "sudo -n docker service update \
+              --with-registry-auth \
+              --image '${IMAGE}' \
+              lab-web"
+
+      - name: Verify Swarm rollout
+        if: github.event_name == 'push'
+        run: |
+          ssh \
+            -i ~/.ssh/platform-lab-deploy \
+            platform@10.77.0.1 \
+            'for i in $(seq 1 30); do
+               REPLICAS=$(sudo -n docker service ls \
+                 --filter name=lab-web \
+                 --format "{{.Replicas}}")
+
+               echo "lab-web replicas: $REPLICAS"
+
+               if [ "$REPLICAS" = "4/4" ]; then
+                 sudo -n docker service inspect lab-web \
+                   --format "{{.Spec.TaskTemplate.ContainerSpec.Image}}"
+                 exit 0
+               fi
+
+               sleep 5
+             done
+
+             echo "Deployment failed to converge"
+             sudo -n docker service ps lab-web
+             exit 1'
