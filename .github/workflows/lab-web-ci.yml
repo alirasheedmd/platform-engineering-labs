@@ -1,0 +1,40 @@
+name: Lab Web CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "applications/lab-web/**"
+      - ".github/workflows/lab-web-ci.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "applications/lab-web/**"
+      - ".github/workflows/lab-web-ci.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate application files
+        run: |
+          test -f applications/lab-web/Dockerfile
+          test -f applications/lab-web/index.html
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build application image
+        uses: docker/build-push-action@v6
+        with:
+          context: applications/lab-web
+          platforms: linux/amd64
+          push: false
+          tags: platform-lab-web:ci
