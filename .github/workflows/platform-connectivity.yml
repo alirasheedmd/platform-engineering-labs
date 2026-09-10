@@ -53,7 +53,7 @@ jobs:
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/platform-lab-deploy
           chmod 600 ~/.ssh/platform-lab-deploy
 
-          echo "${{ secrets.PLATFORM_SSH_KNOWN_HOST }}" > ~/.ssh/known_hosts          
+          echo "${{ secrets.PLATFORM_SSH_KNOWN_HOST }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Test SSH over WireGuard
@@ -62,3 +62,20 @@ jobs:
             -i ~/.ssh/platform-lab-deploy \
             platform@10.77.0.1 \
             'hostname && whoami'
+
+      - name: Verify Docker permissions
+        run: |
+          ssh \
+            -i ~/.ssh/platform-lab-deploy \
+            platform@10.77.0.1 \
+            'sudo -n docker service ls'
+
+      - name: Authenticate Swarm manager to GHCR
+        run: |
+          printf '%s' "${{ secrets.GHCR_READ_TOKEN }}" | \
+            ssh \
+              -i ~/.ssh/platform-lab-deploy \
+              platform@10.77.0.1 \
+              "sudo -n docker login ghcr.io \
+                -u alirasheedmd \
+                --password-stdin"
