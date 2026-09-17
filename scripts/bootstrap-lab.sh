@@ -40,8 +40,17 @@ fi
 
 echo "==> Configuring Swarm and services as platform user"
 
+VAULT_ARGS=()
+
+if [[ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}" ]]; then
+  VAULT_ARGS+=(--vault-password-file "$ANSIBLE_VAULT_PASSWORD_FILE")
+else
+  VAULT_ARGS+=(--ask-vault-pass)
+fi
+
 ansible-playbook \
   -u platform \
+  "${VAULT_ARGS[@]}" \
   playbooks/site.yml
 
 echo "==> Verifying Swarm cluster"
