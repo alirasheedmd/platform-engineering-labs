@@ -4,6 +4,10 @@ A production-oriented platform engineering lab built from first principles using
 
 The goal of this project is not just to deploy containers. It is to understand how a small production platform is designed, automated, operated, broken, recovered, and improved over time.
 
+For the current bootstrap procedure, private `lab-web` architecture, ingress/TLS
+automation and outstanding rebuild gates, see [Lab reproducibility](docs/reproducibility.md).
+The sections below also retain the earlier learning milestones.
+
 ---
 
 ## Why This Lab Exists

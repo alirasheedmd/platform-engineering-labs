@@ -1,0 +1,12 @@
+---
+# Match the image already running on the lab; pin the digest for rebuilds.
+lab_nginx_image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+lab_web_replicas: 4
+lab_ingress_replicas: 2
+lab_tls_hostname: platform-lab.local
+lab_tls_directory: /opt/platform/ingress
+# Adopt the original lab certificate/key when present. No files leave the manager.
+lab_tls_legacy_directory: /home/platform/platform-ingress
+lab_tls_validity: +365d
+lab_tls_renew_before: +7d
+

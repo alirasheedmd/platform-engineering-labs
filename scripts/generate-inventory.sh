@@ -2,8 +2,9 @@
 
 set -euo pipefail
 
-TERRAFORM_DIR="infrastructure/terraform"
-INVENTORY_FILE="configuration/ansible/inventory.ini"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TERRAFORM_DIR="$ROOT_DIR/infrastructure/terraform"
+INVENTORY_FILE="$ROOT_DIR/configuration/ansible/inventory.ini"
 
 NODE1_PUBLIC=$(terraform -chdir="$TERRAFORM_DIR" output -raw platform_node_01_public_ip)
 NODE1_PRIVATE=$(terraform -chdir="$TERRAFORM_DIR" output -raw platform_node_01_private_ip)

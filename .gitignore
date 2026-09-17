@@ -16,3 +16,10 @@ terraform.tfvars
 
 # Ansible
 *.retry
+
+# Private TLS / SSH / VPN material must stay outside Git.
+*.key
+*.pem
+*.p12
+*.pfx
+wg0.conf

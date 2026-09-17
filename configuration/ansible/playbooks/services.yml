@@ -2,6 +2,8 @@
 - name: Deploy Swarm lab services
   hosts: swarm_managers
   become: true
+  vars_files:
+    - ../vars/lab.yml
 
   tasks:
     - name: Check if platform overlay exists
@@ -13,6 +15,7 @@
           - platform-overlay
       register: overlay_check
       changed_when: false
+      check_mode: false
       failed_when: false
 
     - name: Create platform overlay network
@@ -29,30 +32,20 @@
           - platform-overlay
       when: overlay_check.rc != 0
 
-    - name: Check if lab-web service exists
-      ansible.builtin.command:
-        argv:
-          - docker
-          - service
-          - inspect
-          - lab-web
+    - name: Read the deployed application image
+      community.docker.docker_swarm_service_info:
+        name: lab-web
       register: lab_web_check
-      changed_when: false
-      failed_when: false
 
-    - name: Create lab-web service
-      ansible.builtin.command:
-        argv:
-          - docker
-          - service
-          - create
-          - --name
-          - lab-web
-          - --replicas
-          - "4"
-          - --network
+    - name: Converge private lab-web without replacing an existing release
+      community.docker.docker_swarm_service:
+        name: lab-web
+        image: >-
+          {{ lab_web_check.service.Spec.TaskTemplate.ContainerSpec.Image
+             if lab_web_check.exists else lab_nginx_image }}
+        resolve_image: false
+        replicas: "{{ lab_web_replicas }}"
+        networks:
           - platform-overlay
-          - --publish
-          - published=8081,target=80
-          - nginx:1.27-alpine
-      when: lab_web_check.rc != 0
+        publish: []
+        state: present

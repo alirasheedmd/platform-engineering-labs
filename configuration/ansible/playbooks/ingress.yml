@@ -1,0 +1,9 @@
+---
+- name: Configure reproducible HTTPS ingress
+  hosts: swarm_managers
+  become: true
+  vars_files:
+    - ../vars/lab.yml
+  roles:
+    - ingress
+

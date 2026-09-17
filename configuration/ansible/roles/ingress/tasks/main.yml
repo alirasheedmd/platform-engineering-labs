@@ -1,0 +1,199 @@
+---
+- name: Install certificate management dependency
+  ansible.builtin.apt:
+    name: python3-cryptography
+    state: present
+
+- name: Create private ingress material directory
+  ansible.builtin.file:
+    path: "{{ lab_tls_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Check for original lab TLS files
+  ansible.builtin.stat:
+    path: "{{ lab_tls_legacy_directory }}/{{ item }}"
+    get_checksum: false
+  loop:
+    - tls.key
+    - tls.crt
+  register: legacy_tls
+
+- name: Adopt original TLS material without overwriting managed files
+  ansible.builtin.copy:
+    src: "{{ lab_tls_legacy_directory }}/{{ item }}"
+    dest: "{{ lab_tls_directory }}/{{ item }}"
+    remote_src: true
+    force: false
+    owner: root
+    group: root
+    mode: "{{ '0600' if item == 'tls.key' else '0644' }}"
+  loop:
+    - tls.key
+    - tls.crt
+  when: legacy_tls.results | map(attribute='stat.exists') | min
+  no_log: true
+  diff: false
+
+- name: Generate the TLS key only on the manager
+  community.crypto.openssl_privatekey:
+    path: "{{ lab_tls_directory }}/tls.key"
+    type: RSA
+    size: 2048
+    regenerate: never
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+
+- name: Generate certificate request for the lab hostname
+  community.crypto.openssl_csr:
+    path: "{{ lab_tls_directory }}/tls.csr"
+    privatekey_path: "{{ lab_tls_directory }}/tls.key"
+    common_name: "{{ lab_tls_hostname }}"
+    subject_alt_name:
+      - "DNS:{{ lab_tls_hostname }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Check for an existing certificate
+  ansible.builtin.stat:
+    path: "{{ lab_tls_directory }}/tls.crt"
+  register: existing_certificate
+
+- name: Check certificate renewal window
+  community.crypto.x509_certificate_info:
+    path: "{{ lab_tls_directory }}/tls.crt"
+    valid_at:
+      renewal: "{{ lab_tls_renew_before }}"
+  register: certificate_validity
+  when: existing_certificate.stat.exists
+
+- name: Read the public fingerprint of the manager TLS key
+  community.crypto.openssl_privatekey_info:
+    path: "{{ lab_tls_directory }}/tls.key"
+  register: tls_key_info
+  no_log: true
+
+- name: Create or renew the self-signed lab certificate
+  community.crypto.x509_certificate:
+    path: "{{ lab_tls_directory }}/tls.crt"
+    privatekey_path: "{{ lab_tls_directory }}/tls.key"
+    csr_path: "{{ lab_tls_directory }}/tls.csr"
+    provider: selfsigned
+    selfsigned_not_after: "{{ lab_tls_validity }}"
+    ignore_timestamps: true
+    force: true
+    owner: root
+    group: root
+    mode: "0644"
+  when: >-
+    not existing_certificate.stat.exists
+    or not (certificate_validity.valid_at.renewal | default(false))
+    or ('DNS:' ~ lab_tls_hostname) not in (certificate_validity.subject_alt_name | default([]))
+    or (certificate_validity.public_key_fingerprints.sha256 | default('')) != tls_key_info.public_key_fingerprints.sha256
+
+- name: Store the versioned ingress configuration on the manager
+  ansible.builtin.copy:
+    src: nginx.conf
+    dest: "{{ lab_tls_directory }}/nginx.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Validate Nginx and the certificate/key pair before updating ingress
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - platform-overlay
+      - --mount
+      - "type=bind,src={{ lab_tls_directory }}/nginx.conf,dst=/etc/nginx/nginx.conf,readonly"
+      - --mount
+      - "type=bind,src={{ lab_tls_directory }}/tls.crt,dst=/etc/nginx/tls.crt,readonly"
+      - --mount
+      - "type=bind,src={{ lab_tls_directory }}/tls.key,dst=/run/secrets/tls.key,readonly"
+      - "{{ lab_nginx_image }}"
+      - nginx
+      - -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Compute public material versions
+  ansible.builtin.stat:
+    path: "{{ lab_tls_directory }}/{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - nginx.conf
+    - tls.crt
+  register: ingress_material
+
+- name: Name immutable Docker objects from public content
+  ansible.builtin.set_fact:
+    ingress_config_name: "lab-ingress-nginx-{{ ingress_material.results[0].stat.checksum[:20] }}"
+    ingress_cert_name: "lab-ingress-cert-{{ ingress_material.results[1].stat.checksum[:20] }}"
+    ingress_key_name: "lab-ingress-key-{{ ingress_material.results[1].stat.checksum[:20] }}"
+
+- name: Create versioned Nginx configuration
+  community.docker.docker_config:
+    name: "{{ ingress_config_name }}"
+    data_src: "{{ lab_tls_directory }}/nginx.conf"
+    state: present
+
+- name: Create versioned public certificate configuration
+  community.docker.docker_config:
+    name: "{{ ingress_cert_name }}"
+    data_src: "{{ lab_tls_directory }}/tls.crt"
+    state: present
+
+- name: Create versioned TLS key secret directly from the manager file
+  community.docker.docker_secret:
+    name: "{{ ingress_key_name }}"
+    data_src: "{{ lab_tls_directory }}/tls.key"
+    state: present
+  no_log: true
+  diff: false
+
+- name: Converge lab-ingress
+  community.docker.docker_swarm_service:
+    name: lab-ingress
+    image: "{{ lab_nginx_image }}"
+    resolve_image: false
+    replicas: "{{ lab_ingress_replicas }}"
+    networks:
+      - platform-overlay
+    publish:
+      - published_port: 80
+        target_port: 80
+        protocol: tcp
+        mode: ingress
+      - published_port: 443
+        target_port: 443
+        protocol: tcp
+        mode: ingress
+    configs:
+      - config_name: "{{ ingress_config_name }}"
+        filename: /etc/nginx/nginx.conf
+        mode: 0444
+      - config_name: "{{ ingress_cert_name }}"
+        filename: /etc/nginx/tls.crt
+        mode: 0444
+    secrets:
+      - secret_name: "{{ ingress_key_name }}"
+        filename: tls.key
+        mode: 0400
+    update_config:
+      parallelism: 1
+      order: start-first
+      failure_action: rollback
+      monitor: 10s
+    rollback_config:
+      parallelism: 1
+      order: stop-first
+    state: present

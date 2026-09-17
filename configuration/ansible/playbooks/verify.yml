@@ -1,0 +1,33 @@
+---
+- name: Verify the reconstructed lab
+  hosts: swarm_managers
+  become: true
+  gather_facts: false
+  vars_files:
+    - ../vars/lab.yml
+  tasks:
+    - name: Verify membership, service convergence, private access and TLS on each node
+      ansible.builtin.script:
+        cmd: >-
+          ../../../scripts/verify-lab.py
+          --nodes {{ groups['platform_nodes'] | join(',') | quote }}
+          --addresses {{ groups['platform_nodes'] | map('extract', hostvars, 'swarm_advertise_addr') | join(',') | quote }}
+          --hostname {{ lab_tls_hostname | quote }}
+          --certificate {{ (lab_tls_directory ~ '/tls.crt') | quote }}
+          --web-replicas {{ lab_web_replicas }}
+          --ingress-replicas {{ lab_ingress_replicas }}
+          --web-image {{ (lab_expected_web_image | default(lab_web_check.service.Spec.TaskTemplate.ContainerSpec.Image | default(''))) | quote }}
+          --ingress-image {{ lab_nginx_image | quote }}
+          --config-name {{ ingress_config_name | default('') | quote }}
+          --cert-name {{ ingress_cert_name | default('') | quote }}
+          --key-name {{ ingress_key_name | default('') | quote }}
+          --timeout {{ lab_verify_timeout | default(180) }}
+        executable: /usr/bin/python3
+      changed_when: false
+      register: lab_verification
+      when: not ansible_check_mode
+
+    - name: Show verification result
+      ansible.builtin.debug:
+        var: lab_verification.stdout_lines
+      when: not ansible_check_mode
