@@ -1,0 +1,8 @@
+---
+wireguard_interface: wg0
+
+wireguard_server_address: 10.77.0.1/24
+wireguard_server_port: 51820
+
+wireguard_ci_peer_public_key: "b/YplakLWDXcr4q5+jHaJEJQD8bCefz8OrP+gLEebyY="
+wireguard_ci_peer_address: 10.77.0.2/32

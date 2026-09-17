@@ -1,4 +1,6 @@
 ---
+- import_playbook: deployment-access.yml
+- import_playbook: wireguard.yml
 - import_playbook: swarm.yml
 - import_playbook: services.yml
 - import_playbook: ingress.yml

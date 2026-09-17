@@ -1,0 +1,8 @@
+---
+- name: Authorize GitHub Actions deployment SSH key
+  ansible.posix.authorized_key:
+    user: "{{ deployment_ssh_user }}"
+    key: "{{ deployment_ssh_public_key }}"
+    state: present
+    manage_dir: true
+    exclusive: false

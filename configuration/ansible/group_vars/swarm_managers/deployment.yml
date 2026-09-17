@@ -1,0 +1,5 @@
+---
+deployment_ssh_user: platform
+
+deployment_ssh_public_key: >-
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP2e03PeB+HMxDGgwDeDgHdW97G+syJ4+OiuKJ92TrvJ github-actions-platform-lab

@@ -1,0 +1,5 @@
+- name: Configure WireGuard on Swarm manager
+  hosts: swarm_managers
+  become: true
+  roles:
+    - wireguard

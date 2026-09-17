@@ -1,0 +1,7 @@
+---
+- name: Configure CI deployment access
+  hosts: swarm_managers
+  become: true
+
+  roles:
+    - deployment_access

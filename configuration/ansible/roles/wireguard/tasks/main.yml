@@ -1,0 +1,41 @@
+---
+- name: Install WireGuard tools
+  ansible.builtin.apt:
+    name: wireguard-tools
+    state: present
+    update_cache: true
+
+- name: Create WireGuard configuration directory
+  ansible.builtin.file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install WireGuard private key
+  ansible.builtin.copy:
+    content: "{{ wireguard_server_private_key }}\n"
+    dest: /etc/wireguard/server.key
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+
+- name: Install WireGuard configuration
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "/etc/wireguard/{{ wireguard_interface }}.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart WireGuard
+
+- name: Enable and start WireGuard
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wireguard_interface }}"
+    enabled: true
+    state: started
