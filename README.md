@@ -55,6 +55,8 @@ The complete platform was destroyed, reconstructed from the repository, connecte
 
 # Architecture
 
+![Platform Engineering Lab Architecture](docs/images/platform-architecture.png)
+
 ```text
                             GitHub
                                │
