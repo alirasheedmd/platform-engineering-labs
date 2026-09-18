@@ -169,7 +169,7 @@ platform-lab/
 ├── configuration/
 │   └── ansible/
 │       ├── ansible.cfg
-│       ├── inventory.ini
+│       ├── inventory.ini  # generated from Terraform outputs, gitignored
 │       ├── playbooks/
 │       └── roles/
 │
