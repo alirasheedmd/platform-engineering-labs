@@ -23,3 +23,6 @@ terraform.tfvars
 *.p12
 *.pfx
 wg0.conf
+
+# Generated Ansible inventory
+configuration/ansible/inventory.ini
