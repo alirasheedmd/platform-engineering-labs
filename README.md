@@ -1,92 +1,129 @@
 # Platform Engineering Lab
 
-A production-oriented platform engineering lab built from first principles using **Terraform, Ansible, Docker, Docker Swarm, CI/CD, observability, and failure testing**.
+A hands-on platform engineering lab built to understand how infrastructure is **provisioned, configured, secured, deployed, broken, recovered, and reproduced**.
 
-The goal of this project is not just to deploy containers. It is to understand how a small production platform is designed, automated, operated, broken, recovered, and improved over time.
+This project evolved from basic Docker networking and manual infrastructure into a reproducible two-node platform using:
 
-For the current bootstrap procedure, private `lab-web` architecture, ingress/TLS
-automation and outstanding rebuild gates, see [Lab reproducibility](docs/reproducibility.md).
-The sections below also retain the earlier learning milestones.
+- Terraform
+- Ansible
+- Docker
+- Docker Swarm
+- GitHub Actions
+- GHCR
+- WireGuard
+- Nginx
+- TLS
+- DigitalOcean
 
----
+The focus is not the number of tools.
 
-## Why This Lab Exists
-
-A common small-company infrastructure setup starts simply:
-
-- One Ubuntu server
-- Several Docker Compose applications
-- Manual deployments
-- Application-specific networks
-- SSH-based operations
-- Little visibility into workload health
-- Unclear scaling and failure-recovery strategy
-
-That setup works initially, but operational complexity increases as more services are added.
-
-This lab starts from that type of environment and progressively evolves it into a reproducible and observable platform.
-
-The learning process follows this pattern:
-
-```text
-Understand the fundamental
-        ↓
-Build the simplest solution
-        ↓
-Experience a real limitation
-        ↓
-Introduce the appropriate tool
-        ↓
-Break the system intentionally
-        ↓
-Recover it
-        ↓
-Automate it
-        ↓
-Document the operational model
-```
+The focus is understanding **state ownership, failure domains, deployment safety, infrastructure reproducibility, and operational recovery**.
 
 ---
 
-# Target Architecture
+## Current Status
+
+The current platform has been implemented and validated through a complete clean-room rebuild.
 
 ```text
-                         GitHub
-                            │
-                            │ push
-                            ▼
-                     GitHub Actions
-                            │
-                      test / build
-                            │
-                            ▼
-                   Container Registry
-                            │
-                            ▼
-                    Docker Swarm
-                            │
-               ┌────────────┴────────────┐
-               │                         │
-         Manager Node               Worker Node
-               │                         │
-               └──── Overlay Network ────┘
-                            │
-                ┌───────────┼───────────┐
-                │           │           │
-             Frontend     Backend      Redis
-             replicas     replicas
-                │
-                ▼
-          Reverse Proxy / Ingress
-                │
-                ▼
-             Internet
-
-       Monitoring, health checks and logs
-             around the platform
+Infrastructure as Code             ✅
+Two-node cloud infrastructure      ✅
+Private VPC networking             ✅
+Cloud firewall                     ✅
+Linux configuration automation     ✅
+SSH hardening                      ✅
+Docker automation                  ✅
+Multi-node Docker Swarm            ✅
+Overlay networking                 ✅
+Private application service        ✅
+HTTPS ingress                      ✅
+TLS lifecycle automation           ✅
+Docker Configs / Secrets           ✅
+WireGuard CI deployment network    ✅
+GitHub Actions CI/CD               ✅
+GHCR immutable releases            ✅
+Rolling application deployment     ✅
+Destroy → rebuild validation       ✅
+External CI-state reconciliation   ✅
+Operational idempotency            ✅
+Release preservation               ✅
 ```
 
-Infrastructure responsibilities are intentionally separated:
+The complete platform was destroyed, reconstructed from the repository, connected back to GitHub Actions, and successfully received a new immutable application release.
+
+---
+
+# Architecture
+
+```text
+                            GitHub
+                               │
+                        push / workflow
+                               │
+                               ▼
+                      GitHub Actions
+                        │          │
+                     Build       Deploy
+                        │          │
+                        ▼          ▼
+                       GHCR    WireGuard
+                        │          │
+                        │      10.77.0.1
+                        │          │
+                        └────┬─────┘
+                             ▼
+                     platform-node-01
+                      Swarm Manager
+                       10.10.10.3
+                             │
+                     platform-overlay
+                             │
+                ┌────────────┴────────────┐
+                │                         │
+                ▼                         ▼
+        platform-node-01          platform-node-02
+        Swarm Manager             Swarm Worker
+                │                         │
+                └──────────┬──────────────┘
+                           │
+                       lab-web
+                      4 replicas
+                           ▲
+                           │
+                      lab-ingress
+                      2 replicas
+                           │
+                     HTTP / HTTPS
+                           │
+                           ▼
+                        Internet
+```
+
+The application itself is not directly exposed to the Internet.
+
+Public traffic flows through the ingress layer:
+
+```text
+Internet
+    ↓
+DigitalOcean Firewall
+    ↓
+Swarm published ports
+    ↓
+lab-ingress
+    ↓
+platform-overlay
+    ↓
+lab-web
+```
+
+See [Platform Architecture](docs/architecture.md) for the complete architecture, control planes, trust boundaries, state domains and failure domains.
+
+---
+
+# State Ownership
+
+One of the main design goals of the lab is to give each automation layer a clear responsibility.
 
 ```text
 Terraform
@@ -95,1012 +132,891 @@ Cloud infrastructure
 
 Ansible
     ↓
-Operating system and host configuration
+Host and platform configuration
 
-Docker / Swarm
+Docker Swarm
     ↓
-Application runtime and orchestration
+Runtime desired state
 
-CI/CD
+GitHub Actions
     ↓
 Application delivery
 
-Observability
+GHCR
     ↓
-Platform and application visibility
+Immutable application artifacts
+```
+
+In practical terms:
+
+| Layer          | Responsibility                                        |
+| -------------- | ----------------------------------------------------- |
+| Terraform      | Droplets, firewall and cloud resource relationships   |
+| Ansible        | Linux, SSH, Docker, WireGuard, Swarm, TLS and ingress |
+| Docker Swarm   | Services, replicas, scheduling and reconciliation     |
+| GitHub Actions | Application build and deployment                      |
+| GHCR           | Immutable container artifacts                         |
+
+Ansible can create an initial application service during a fresh rebuild, but once CI/CD deploys a release, subsequent configuration runs preserve that release.
+
+---
+
+# Infrastructure
+
+The current environment consists of two Ubuntu 24.04 DigitalOcean nodes.
+
+```text
+DigitalOcean
+│
+├── Existing VPC
+│   └── 10.10.10.0/24
+│
+├── platform-node-01
+│   ├── Swarm Manager
+│   └── 10.10.10.3
+│
+├── platform-node-02
+│   ├── Swarm Worker
+│   └── 10.10.10.2
+│
+└── Terraform-managed Cloud Firewall
+```
+
+Terraform creates:
+
+```text
+digitalocean_droplet.platform_node_01
+digitalocean_droplet.platform_node_02
+digitalocean_firewall.platform
+```
+
+The VPC and administrative cloud SSH key are intentionally treated as external prerequisites and resolved through Terraform data sources.
+
+---
+
+# Network Security
+
+The cloud firewall separates public services from cluster-internal traffic.
+
+```text
+22/tcp
+    administrative source only
+
+80/tcp
+    public HTTP ingress
+
+443/tcp
+    public HTTPS ingress
+
+51820/udp
+    WireGuard deployment tunnel
+
+2377/tcp
+7946/tcp
+7946/udp
+4789/udp
+    private VPC only
+```
+
+Swarm management, gossip and overlay-network traffic are not exposed publicly.
+
+---
+
+# Configuration Management
+
+Terraform creates the machines.
+
+Ansible turns them into platform nodes.
+
+```text
+Terraform outputs
+        ↓
+generate-inventory.sh
+        ↓
+generated inventory.ini
+        ↓
+bootstrap-lab.sh
+        ↓
+Ansible
+```
+
+The generated inventory contains ephemeral cloud addresses and is intentionally gitignored.
+
+The repository tracks the automation that creates the inventory rather than the current infrastructure addresses.
+
+---
+
+# Bootstrap
+
+The main platform bootstrap entry point is:
+
+```bash
+./scripts/bootstrap-lab.sh
+```
+
+On fresh nodes it performs:
+
+```text
+Administrative SSH
+        ↓
+Linux baseline
+        ↓
+platform user
+        ↓
+sudo configuration
+        ↓
+SSH hardening
+        ↓
+Docker
+        ↓
+deployment SSH access
+        ↓
+WireGuard
+        ↓
+Swarm manager
+        ↓
+worker join
+        ↓
+overlay network
+        ↓
+application bootstrap
+        ↓
+TLS
+        ↓
+HTTPS ingress
+        ↓
+platform verification
+```
+
+The same entry point can safely run against an existing platform.
+
+With unchanged state, the validated result is:
+
+```text
+changed=0
+failed=0
+unreachable=0
 ```
 
 ---
 
-# Technology Stack
+# Docker Swarm
 
-## Infrastructure as Code
+Current cluster state:
 
-- Terraform
-- DigitalOcean Provider
-- DigitalOcean VPC
-- Droplets
-- Cloud Firewalls
-- SSH key references
+```text
+platform-node-01   Ready   Active   Leader
+platform-node-02   Ready   Active
+```
 
-## Configuration Management
+Current service target:
 
-- Ansible
-- Role-based configuration
-- SSH hardening
-- Administrative user provisioning
-- Docker installation and configuration
+```text
+lab-web       4/4
+lab-ingress   2/2
+```
 
-## Containers
+`lab-web` is private and communicates through:
 
-- Docker Engine
-- Docker Compose
-- User-defined bridge networks
-- Docker Swarm
+```text
+platform-overlay
+```
 
-## Planned Platform Components
+Swarm service discovery is used instead of depending on container IP addresses.
 
-- Multi-node Docker Swarm
-- Overlay networking
-- Container registry
-- GitHub Actions
-- Reverse proxy / ingress
-- Health checks
-- Rolling deployments
-- Prometheus
-- Grafana
-- Node Exporter
-- cAdvisor
+---
+
+# HTTPS Ingress
+
+`lab-ingress` runs two replicas and publishes:
+
+```text
+80/tcp
+443/tcp
+```
+
+Expected behavior:
+
+```text
+HTTP
+    ↓
+301 redirect
+    ↓
+HTTPS
+    ↓
+Nginx
+    ↓
+lab-web:80
+```
+
+The current lab uses a self-signed certificate.
+
+TLS configuration is automated by Ansible.
+
+---
+
+# Docker Configs and Secrets
+
+Ingress configuration is represented using immutable Docker objects.
+
+```text
+nginx.conf
+    ↓
+Docker Config
+
+tls.crt
+    ↓
+Docker Config
+
+tls.key
+    ↓
+Docker Secret
+```
+
+Configuration and certificate versions use content-derived identities.
+
+A configuration or certificate change creates a new immutable object instead of modifying an existing one in place.
+
+---
+
+# CI/CD
+
+Application delivery is handled by:
+
+```text
+.github/workflows/lab-web-ci.yml
+```
+
+The pipeline performs:
+
+```text
+Git push
+    ↓
+application validation
+    ↓
+Docker Buildx
+    ↓
+container build
+    ↓
+GHCR
+    ↓
+capture image digest
+    ↓
+WireGuard
+    ↓
+deployment SSH
+    ↓
+Swarm manager
+    ↓
+docker service update
+    ↓
+rolling deployment
+    ↓
+rollout verification
+```
+
+---
+
+# Immutable Releases
+
+Application releases are identified using both the source commit and the OCI image digest.
+
+```text
+ghcr.io/alirasheedmd/platform-lab-web:
+sha-<GIT_COMMIT>@sha256:<IMAGE_DIGEST>
+```
+
+The Git SHA provides:
+
+```text
+source traceability
+```
+
+The OCI digest provides:
+
+```text
+immutable artifact identity
+```
+
+The clean-room validation deployed:
+
+```text
+sha-e18431842fa466381601851d4deb4380a01f8685
+```
+
+using the immutable image digest produced by CI.
+
+---
+
+# Private CI Deployment Path
+
+GitHub Actions does not use public SSH as its normal deployment path.
+
+Instead:
+
+```text
+GitHub Actions
+      │
+      │ WireGuard
+      ▼
+Swarm Manager
+   10.77.0.1
+      │
+      │ SSH
+      ▼
+platform user
+      │
+      ▼
+Docker Swarm
+```
+
+A dedicated workflow validates this path independently:
+
+```text
+.github/workflows/platform-connectivity.yml
+```
+
+It verifies:
+
+- WireGuard connectivity,
+- VPN reachability,
+- SSH authentication,
+- Docker permissions,
+- Swarm-manager access,
+- GHCR authentication.
+
+This separates connectivity failures from application build failures.
+
+---
+
+# GitHub State Reconciliation
+
+Recreating a VM changes infrastructure identity.
+
+For the manager, this includes:
+
+```text
+public IP address
+SSH host key
+```
+
+GitHub therefore contains rebuild-sensitive state:
+
+```text
+PLATFORM_MANAGER_PUBLIC_IP
+PLATFORM_SSH_KNOWN_HOST
+```
+
+These values are reconciled after a rebuild using:
+
+```bash
+./scripts/sync-github-secrets.sh
+```
+
+This is an important part of the rebuild process.
+
+A platform rebuild is not complete merely because the new servers are running. External systems referencing the old infrastructure must also be reconciled.
+
+---
+
+# Clean-Room Rebuild
+
+The platform has been tested using the following sequence:
+
+```text
+destroy compute
+    ↓
+terraform apply
+    ↓
+verify Terraform convergence
+    ↓
+bootstrap fresh nodes
+    ↓
+reconstruct Swarm
+    ↓
+reconstruct WireGuard
+    ↓
+reconstruct TLS / ingress
+    ↓
+synchronize GitHub state
+    ↓
+run CI connectivity validation
+    ↓
+validate public ingress
+    ↓
+push application release
+    ↓
+build immutable GHCR artifact
+    ↓
+deploy through WireGuard
+    ↓
+verify Swarm convergence
+    ↓
+verify public application
+    ↓
+rerun bootstrap
+    ↓
+prove idempotency
+```
+
+No manual server repair was required during the successful clean-room validation.
+
+See [Clean-Room Rebuild Runbook](docs/runbooks/rebuild.md).
+
+---
+
+# Release Validation
+
+A deployment is not considered successful only because GitHub Actions reports success.
+
+The release is checked at three layers.
+
+## 1. Desired State
+
+```bash
+sudo docker service ls
+```
+
+Expected:
+
+```text
+lab-web       4/4
+lab-ingress   2/2
+```
+
+## 2. Artifact Identity
+
+```bash
+sudo docker service inspect lab-web \
+  --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+```
+
+Expected form:
+
+```text
+ghcr.io/...:sha-<COMMIT>@sha256:<DIGEST>
+```
+
+## 3. User-Visible State
+
+The application is fetched through both public ingress paths and checked for the newly deployed content.
+
+```text
+CI success
+    +
+Swarm convergence
+    +
+correct artifact digest
+    +
+public application response
+    =
+validated release
+```
+
+---
+
+# Reproducibility
+
+For this project, reproducibility does not simply mean:
+
+> Terraform can create two servers.
+
+It means:
+
+```text
+source-controlled infrastructure
+        +
+source-controlled configuration
+        +
+controlled external state
+        +
+explicit ownership boundaries
+        +
+repeatable reconciliation
+        +
+automated validation
+        =
+reproducible platform
+```
+
+The platform must be able to survive destruction of its disposable compute layer without relying on undocumented manual server configuration.
+
+See [Lab Reproducibility](docs/reproducibility.md).
+
+---
+
+# Idempotency
+
+After the immutable CI release was deployed, the complete bootstrap was run again.
+
+The result was:
+
+```text
+platform-node-01   changed=0   failed=0   unreachable=0
+platform-node-02   changed=0   failed=0   unreachable=0
+```
+
+The rerun also:
+
+- did not reinitialize Swarm,
+- did not unnecessarily rejoin the worker,
+- did not recreate the overlay network,
+- did not unnecessarily regenerate TLS,
+- reused existing Docker Configs and Secrets,
+- preserved the existing CI-owned application release.
+
+This verifies operational idempotency separately from clean-room reproducibility.
 
 ---
 
 # Repository Structure
+
+Core platform paths:
 
 ```text
 platform-lab/
 │
 ├── .github/
 │   └── workflows/
+│       ├── lab-web-ci.yml
+│       └── platform-connectivity.yml
 │
-├── apps/
-│   ├── backend/
-│   └── frontend/
+├── applications/
+│   └── lab-web/
 │
 ├── configuration/
 │   └── ansible/
 │       ├── ansible.cfg
-│       ├── inventory.ini  # generated from Terraform outputs, gitignored
+│       ├── inventory.ini        # generated, gitignored
 │       ├── playbooks/
-│       └── roles/
+│       ├── roles/
+│       ├── requirements.yml
+│       └── vars/
 │
 ├── infrastructure/
 │   └── terraform/
 │
-├── platform/
-│   └── swarm/
-│
-├── observability/
-│
 ├── docs/
+│   ├── architecture.md
+│   ├── reproducibility.md
+│   ├── runbooks/
+│   │   └── rebuild.md
+│   └── validation/
+│       └── 2026-09-17-ingress.md
 │
 ├── scripts/
+│   ├── bootstrap-lab.sh
+│   ├── generate-inventory.sh
+│   └── sync-github-secrets.sh
 │
 └── README.md
 ```
 
 ---
 
-# Current Infrastructure
+# Rebuilding the Platform
 
-The initial environment consists of a DigitalOcean Ubuntu node provisioned entirely through Terraform.
+The detailed procedure is maintained in:
 
-```text
-DigitalOcean
-│
-├── VPC
-│   └── 10.10.10.0/24
-│
-├── platform-node-01
-│   ├── Ubuntu 24.04
-│   ├── Public interface
-│   └── Private VPC interface
-│
-└── Cloud Firewall
-```
+[docs/runbooks/rebuild.md](docs/runbooks/rebuild.md)
 
-The private VPC is intentionally used for internal cluster communication.
-
-Public IP addresses, API tokens, Terraform variable files and credentials are not committed to the repository.
-
----
-
-# Terraform
-
-Terraform currently manages:
-
-- DigitalOcean provider configuration
-- VPC
-- Droplet
-- SSH key lookup
-- Droplet tags
-- DigitalOcean firewall
-- Infrastructure outputs
-
-Key concepts explored:
-
-- Providers
-- Resources
-- Data sources
-- Variables
-- Outputs
-- Dependency graphs
-- Terraform state
-- Provider authentication
-- Least-privilege API access
-- Planning versus applying infrastructure changes
-
-One useful failure encountered during the lab was an API authorization error caused by a missing `tag:create` scope.
-
-Instead of giving the API token unrestricted access, the required permission was identified and added.
-
-This reinforced an important principle:
-
-> Infrastructure automation credentials should receive the permissions required by the infrastructure definition, not blanket administrative access.
-
----
-
-# Ansible
-
-Terraform creates the machines.
-
-Ansible turns those machines into platform-ready hosts.
-
-The current Ansible structure uses roles such as:
-
-```text
-roles/
-├── common/
-├── ssh_hardening/
-├── docker/
-└── swarm/
-```
-
-The baseline configuration currently includes:
-
-- Platform administrative user
-- SSH public-key authentication
-- Passwordless sudo with controlled sudoers configuration
-- Root SSH disabled
-- Password authentication disabled
-- Keyboard-interactive authentication disabled
-- Baseline Linux utilities
-- Docker official APT repository
-- Docker Engine
-- Docker CLI
-- containerd
-- Docker Buildx
-- Docker Compose plugin
-
-The playbooks are designed to be idempotent.
-
-Running the same configuration repeatedly should converge toward:
-
-```text
-changed=0
-failed=0
-```
-
-once the desired configuration is already present.
-
----
-
-# SSH Security Model
-
-The initial cloud image allowed root-based bootstrap access.
-
-Ansible then created the dedicated:
-
-```text
-platform
-```
-
-administrative account.
-
-The hardened access model became:
-
-```text
-Engineer
-    │
-    │ SSH key
-    ▼
-platform user
-    │
-    │ sudo
-    ▼
-privileged operation
-```
-
-Direct root SSH is disabled.
-
-Password-based SSH authentication is also disabled.
-
-SSH configuration is managed through:
-
-```text
-/etc/ssh/sshd_config.d/
-```
-
-and configuration changes are validated with `sshd -t` before the SSH service is reloaded.
-
----
-
-# Docker Runtime Lessons
-
-The lab intentionally explores Docker below the Compose abstraction.
-
-Topics covered include:
-
-- Image versus container
-- Docker daemon
-- containerd
-- Docker socket
-- Published ports
-- Container lifecycle
-- Container filesystem state
-- Docker networking
-- Runtime debugging
-
-One important security lesson involved:
-
-```text
-/var/run/docker.sock
-```
-
-Users able to control the Docker daemon effectively have root-equivalent control over the host.
-
-For that reason, the platform user has not simply been added to the `docker` group.
-
-Current access is intentionally:
-
-```text
-platform
-    ↓
-sudo
-    ↓
-Docker
-```
-
----
-
-# Docker Networking
-
-## Default Bridge
-
-An initial experiment demonstrated that container-name resolution does not behave the way many users expect on Docker's legacy default bridge network.
-
-```text
-Container A
-    │
-    │ lab-nginx
-    ▼
-Default bridge
-
-DNS resolution failed
-```
-
----
-
-## User-Defined Bridge
-
-A user-defined bridge network was then introduced:
-
-```text
-Container A
-       │
-       │ Docker DNS
-       ▼
-     lab-net
-       │
-       ▼
-   lab-nginx
-```
-
-Container-name resolution worked correctly.
-
-This demonstrated that Docker networking is more than IP connectivity—it also provides service discovery when using appropriate user-defined networks.
-
----
-
-# Reproducing a Real Compose Problem
-
-The lab then reproduced a common production situation:
-
-```text
-backend Compose project
-
-redis Compose project
-```
-
-Each Compose project automatically created its own network:
-
-```text
-backend_default
-
-redis_default
-```
-
-The result:
-
-```text
-Backend
-   │
-   │ lab-redis
-   ▼
-Redis
-
-FAILED
-```
-
-The containers were healthy, but they were attached to different isolated networks.
-
----
-
-# Shared External Network
-
-The initial solution did not require an orchestrator.
-
-A shared external Docker bridge network allowed independent Compose stacks to communicate:
-
-```text
-Backend
-    │
-    │
-shared-net
-    │
-    │
-Redis
-```
-
-Redis connectivity was verified successfully:
-
-```text
-PONG
-```
-
-This produced an important architectural conclusion:
-
-> Cross-Compose communication on a single host does not, by itself, justify introducing Docker Swarm.
-
-Use the simplest tool that actually solves the current problem.
-
----
-
-# Container Immutability Lesson
-
-During testing, `redis-cli` was manually installed inside the backend container.
-
-Later, Docker Compose recreated that container.
-
-The manually installed package disappeared.
-
-```text
-Image
-  ↓
-Container created
-  ↓
-Manual package installation
-  ↓
-Container recreated
-  ↓
-Manual change disappeared
-```
-
-This demonstrated the difference between:
-
-```text
-Dockerfile / image state
-    =
-reproducible software definition
-```
-
-and:
-
-```text
-manual docker exec changes
-    =
-temporary container drift
-```
-
-Application dependencies should belong in the image definition rather than being manually installed into running production containers.
-
----
-
-# Docker Swarm
-
-Docker Swarm was introduced only after understanding what single-host Compose could already solve.
-
-The current node has been initialized as a Swarm manager through Ansible.
-
-```text
-platform-node-01
-│
-├── Ready
-├── Active
-└── Leader
-```
-
-The Swarm manager advertises itself over the private platform VPC rather than the public interface.
-
----
-
-# Service, Task and Container
-
-Swarm introduces an important hierarchy:
-
-```text
-Service
-   │
-   ├── Task 1
-   │     └── Container
-   │
-   ├── Task 2
-   │     └── Container
-   │
-   └── Task 3
-         └── Container
-```
-
-Instead of requesting:
-
-```text
-Create this particular container.
-```
-
-a Swarm service describes desired state:
-
-```text
-Maintain three replicas of this application.
-```
-
----
-
-# Desired-State Reconciliation
-
-A replicated Nginx service was created:
-
-```text
-lab-web
-replicas = 3
-```
-
-One underlying container was intentionally removed.
-
-Swarm observed:
-
-```text
-Desired = 3
-Actual  = 2
-```
-
-and created a replacement task automatically.
-
-The platform returned to:
-
-```text
-3/3 replicas
-```
-
-without manually recreating the deleted container.
-
-This demonstrated one of the core ideas behind modern orchestration systems:
-
-> Operators declare desired state. Controllers continuously reconcile actual state toward it.
-
----
-
-# Replicas Do Not Automatically Mean More Capacity
-
-The current lab deliberately runs several replicas on a single small node.
-
-```text
-platform-node-01
-
-├── lab-web.1
-├── lab-web.2
-└── lab-web.3
-```
-
-All replicas share the same:
-
-- CPU
-- Memory
-- Disk
-- Network interface
-- Host failure domain
-
-Therefore:
-
-```text
-3 replicas on one 1-vCPU VM
-```
-
-does not mean:
-
-```text
-3 × compute capacity
-```
-
-Replicas on a single host can provide process-level redundancy and help with rolling updates, but true horizontal capacity and node-level availability require additional compute nodes.
-
-This distinction becomes important when the lab moves to multi-node orchestration.
-
----
-
-# Performance and Capacity
-
-A container does not have a universal request-per-second limit.
-
-Capacity depends on:
-
-- Application implementation
-- CPU
-- Memory
-- Database latency
-- Network latency
-- Request complexity
-- Payload size
-- External dependencies
-- Runtime behavior
-
-Capacity should therefore be measured through load testing.
-
-A production capacity statement should look more like:
-
-```text
-One application replica sustains 250 requests/sec
-while:
-
-p95 latency < 250 ms
-error rate < 1%
-CPU < 70%
-memory remains stable
-```
-
-rather than:
-
-```text
-One Docker container can handle X users.
-```
-
-Replica planning can then be based on measured capacity:
-
-```text
-Required replicas
-≈
-Peak expected requests/sec
-÷
-Safe measured requests/sec per replica
-```
-
-plus additional failure and deployment headroom.
-
----
-
-# Failure Domains
-
-An important reliability concept explored in this project is the difference between replica count and failure isolation.
-
-```text
-Three replicas
-on one VM
-```
-
-protect against some application-process failures.
-
-They do not protect against:
-
-```text
-VM failure
-host kernel failure
-host network failure
-disk failure
-datacenter failure
-```
-
-A production platform therefore needs to reason about failure domains:
-
-```text
-Application process
-        ↓
-Container
-        ↓
-Node
-        ↓
-Network
-        ↓
-Availability zone / datacenter
-```
-
-The question to repeatedly ask is:
-
-> If this component disappears right now, what exactly stops working?
-
----
-
-# Current Progress
-
-```text
-Terraform / IaC              █████████░  ~90%
-Ansible                      ████████░░  ~85%
-Linux security baseline      ████████░░  ~80%
-Docker fundamentals          ███████░░░  ~70%
-Docker Compose               ███████░░░  ~70%
-Docker Swarm                 ███░░░░░░░  ~30%
-Multi-node orchestration     ░░░░░░░░░░
-Container registry           ░░░░░░░░░░
-CI/CD                        ░░░░░░░░░░
-Observability                ░░░░░░░░░░
-```
-
----
-
-# Roadmap
-
-## Phase 1 — Foundation
-
-- [x] Repository architecture
-- [x] Terraform provider
-- [x] DigitalOcean VPC
-- [x] Terraform-managed Droplet
-- [x] Cloud firewall
-- [x] Infrastructure outputs
-- [x] Ansible baseline
-- [x] Dedicated platform user
-- [x] SSH hardening
-- [x] Docker installation through Ansible
-
----
-
-## Phase 2 — Container Fundamentals
-
-- [x] Docker runtime
-- [x] Images and containers
-- [x] Published ports
-- [x] Docker socket security
-- [x] Default bridge networking
-- [x] User-defined bridge networking
-- [x] Docker DNS
-- [x] Separate Compose network failure
-- [x] Shared external Compose network
-- [x] Container immutability experiment
-
----
-
-## Phase 3 — Swarm Fundamentals
-
-- [x] Initialize manager through Ansible
-- [x] Understand nodes
-- [x] Understand managers and workers
-- [x] Create replicated service
-- [x] Understand services, tasks and containers
-- [x] Desired-state reconciliation
-- [ ] Scale replicas
-- [ ] Overlay networking
-- [ ] Service discovery
-- [ ] Internal load balancing
-- [ ] Rolling updates
-- [ ] Rollback
-
----
-
-## Phase 4 — Multi-Node Platform
-
-- [ ] Provision second node with Terraform
-- [ ] Configure it through Ansible
-- [ ] Join it to Swarm
-- [ ] Schedule workloads across nodes
-- [ ] Placement constraints
-- [ ] Drain and activate nodes
-- [ ] Test worker failure
-- [ ] Understand manager quorum
-
----
-
-## Phase 5 — Production Workload Delivery
-
-- [ ] Container registry
-- [ ] Versioned images
-- [ ] GitHub Actions
-- [ ] Automated builds
-- [ ] Automated deployment
-- [ ] Deployment verification
-- [ ] Rollback workflow
-
----
-
-## Phase 6 — Production Operations
-
-- [ ] Reverse proxy / ingress
-- [ ] TLS
-- [ ] Health checks
-- [ ] Resource reservations and limits
-- [ ] Secrets
-- [ ] Stateful workload strategy
-- [ ] Persistent storage
-- [ ] Backups
-
----
-
-## Phase 7 — Observability
-
-- [ ] Prometheus
-- [ ] Grafana
-- [ ] Node Exporter
-- [ ] cAdvisor
-- [ ] Platform health visibility
-- [ ] Service-level metrics
-
----
-
-## Phase 8 — Failure Engineering
-
-Planned experiments include:
-
-- [x] Delete a service container
-- [ ] Crash application process
-- [ ] Stop Docker daemon
-- [ ] Drain worker
-- [ ] Lose worker node
-- [ ] Deploy bad application version
-- [ ] Break health check
-- [ ] Break service networking
-- [ ] Test resource exhaustion
-- [ ] Test rollback
-
-Each failure experiment should answer:
-
-```text
-What failed?
-
-How was it detected?
-
-What recovered automatically?
-
-What required human intervention?
-
-How would this be prevented or mitigated in production?
-```
-
----
-
-# Final Validation
-
-The final test for this project will be intentionally destructive.
-
-Destroy the infrastructure:
+At a high level:
 
 ```bash
-terraform destroy
+cd infrastructure/terraform
+
+terraform plan
+terraform apply
+terraform plan
+
+cd ../..
+
+./scripts/bootstrap-lab.sh
+./scripts/sync-github-secrets.sh
+
+gh workflow run platform-connectivity.yml
 ```
 
-Then rebuild the platform using only:
+After connectivity passes, application delivery is performed through the normal GitHub Actions release workflow.
+
+Do not treat this abbreviated sequence as a substitute for the rebuild runbook when performing destructive operations.
+
+---
+
+# Documentation
+
+Detailed documentation is intentionally separated from this README.
+
+### Architecture
+
+[docs/architecture.md](docs/architecture.md)
+
+Covers:
+
+- system topology,
+- control planes,
+- deployment path,
+- trust boundaries,
+- ownership boundaries,
+- state domains,
+- failure domains.
+
+### Reproducibility
+
+[docs/reproducibility.md](docs/reproducibility.md)
+
+Covers:
+
+- external state,
+- clean-room reconstruction,
+- idempotency,
+- release ownership,
+- dependency closure,
+- acceptance criteria.
+
+### Rebuild Runbook
+
+[docs/runbooks/rebuild.md](docs/runbooks/rebuild.md)
+
+Contains the operational rebuild procedure, validation gates and stop conditions.
+
+### Validation Evidence
+
+[docs/validation/](docs/validation/)
+
+Contains dated validation evidence from platform exercises and reconstruction tests.
+
+---
+
+# Engineering Progression
+
+The platform was intentionally built incrementally.
 
 ```text
-Git repository
-Terraform
+Architecture and repository
+        ↓
+Terraform fundamentals
+        ↓
+Cloud networking
+        ↓
+Compute and firewall
+        ↓
 Ansible
-Cloud credentials
-SSH credentials
+        ↓
+Linux access model
+        ↓
+SSH hardening
+        ↓
+Docker
+        ↓
+Docker networking
+        ↓
+Compose networking limitations
+        ↓
+Docker Swarm
+        ↓
+Multi-node orchestration
+        ↓
+Scheduling
+        ↓
+Failure recovery
+        ↓
+State and storage experiments
+        ↓
+Rolling updates
+        ↓
+Private registry
+        ↓
+CI/CD
+        ↓
+Ingress and TLS
+        ↓
+Private deployment networking
+        ↓
+Clean-room rebuild
+        ↓
+Operational idempotency
 ```
 
-Expected flow:
+The tools were introduced because of a problem encountered in the previous stage rather than simply being added to the stack.
+
+---
+
+# Failure Engineering
+
+The lab has intentionally exercised failure scenarios such as:
+
+- killing service tasks,
+- replica reconciliation,
+- scaling services,
+- draining and reactivating nodes,
+- worker loss,
+- service rescheduling,
+- failed image deployment,
+- rollback,
+- node-local storage behavior,
+- network isolation,
+- destroyed and recreated infrastructure.
+
+The goal is to understand not only how the happy path works, but also how the platform behaves when components fail.
+
+---
+
+# Current Boundaries
+
+The current lab intentionally does **not** claim production completeness.
+
+Known boundaries include:
+
+- one Swarm manager, therefore no manager quorum HA,
+- no managed external load balancer,
+- self-signed TLS rather than publicly trusted certificates,
+- no production secrets-management platform,
+- no production-grade stateful disaster recovery,
+- no automated backup/restore architecture,
+- no multi-region architecture,
+- no Kubernetes,
+- incomplete observability stack.
+
+These boundaries are documented rather than hidden.
+
+---
+
+# Next Platform Maturity Areas
+
+Future work may include:
+
+```text
+Observability
+├── Prometheus
+├── Grafana
+├── Node Exporter
+└── cAdvisor
+
+Stateful recovery
+├── backup
+├── restore
+├── replication
+├── RPO
+└── RTO
+
+Security
+├── secrets-management platform
+├── stronger deployment authorization
+└── additional host/runtime hardening
+
+Availability
+├── manager quorum
+└── external load balancing
+```
+
+These are future maturity areas, not requirements for the already-proven clean-room rebuild.
+
+---
+
+# Key Lessons
+
+## Infrastructure is more than servers
+
+Infrastructure also includes:
+
+- identities,
+- credentials,
+- external references,
+- networking,
+- trust relationships,
+- deployment systems.
+
+---
+
+## A successful command is not enough
+
+A successful:
 
 ```text
 terraform apply
-        ↓
-infrastructure created
-        ↓
-Ansible configuration
-        ↓
-platform nodes ready
-        ↓
-Swarm cluster created
-        ↓
-applications deployed
-        ↓
-monitoring online
 ```
 
-If the platform cannot be rebuilt without undocumented manual steps, the automation or documentation is incomplete.
+does not prove that CI/CD works.
 
----
-
-# Engineering Principles
-
-This project intentionally follows several principles.
-
-### Automate Desired State
-
-If a change represents persistent desired configuration, it should eventually be automated.
+A successful:
 
 ```text
-Infrastructure → Terraform
-
-Host configuration → Ansible
-
-Workloads → orchestration / deployment definitions
-
-Application delivery → CI/CD
+bootstrap-lab.sh
 ```
 
-SSH remains useful for investigation and break-glass operations, not as the normal deployment mechanism.
+does not prove that GitHub references the correct manager.
 
----
-
-### Understand Before Abstracting
-
-New tooling is introduced only after experiencing the problem it solves.
-
-Examples:
+A successful:
 
 ```text
-Isolated Compose networks
-        ↓
-shared Docker network
-
-Single-host limitations
-        ↓
-Swarm overlay networking
-
-Manual container management
-        ↓
-desired-state services
-
-Manual deployment
-        ↓
-CI/CD
+GitHub Actions run
 ```
 
----
+does not prove that users receive the correct release.
 
-### Break the Platform
-
-Reliability cannot be learned only from successful deployments.
-
-The platform is intentionally subjected to failures so recovery behavior can be observed and documented.
+Each dependency layer needs its own evidence.
 
 ---
 
-### Prefer Reproducibility Over Manual State
+## State ownership matters
 
-A system should be reproducible from source-controlled definitions.
+Terraform, Ansible and CI/CD must not continuously overwrite one another.
 
-Manual server configuration creates undocumented state and operational risk.
-
----
-
-### Use the Simplest Tool That Solves the Problem
-
-Not every workload requires Kubernetes.
-
-Not every Compose problem requires Swarm.
-
-Not every service requires multiple replicas.
-
-Architecture should be driven by actual operational requirements rather than tool complexity.
+Clear ownership makes reconciliation predictable.
 
 ---
 
-# Security
+## Rebuilding is stronger evidence than installation
 
-Sensitive values are intentionally excluded from version control.
+The strongest test of automation is not:
 
-Do not commit:
-
-```text
-terraform.tfstate
-terraform.tfstate.*
-*.tfvars
-.env
-.env.*
-API tokens
-private SSH keys
-registry credentials
-CI/CD secrets
-Ansible Vault passwords
-```
-
-`.terraform.lock.hcl` should remain committed so provider dependency versions are reproducible.
-
-Example configuration files should use documentation/test values instead of real infrastructure credentials.
-
----
-
-# Lab Timeline
-
-## Completed
-
-**August 29 – September 1, 2026**
-
-- Repository architecture
-- Terraform foundation
-- DigitalOcean VPC
-- Compute provisioning
-- Least-privilege API permissions
-- Cloud firewall
-- Ansible configuration management
-- Linux access model
-- SSH hardening
-- Docker installation
-- Docker runtime fundamentals
-- Docker bridge networking
-- Docker DNS
-- Compose network isolation
-- Shared Compose networking
-- Container immutability
-- Swarm manager initialization
-- Replicated services
-- Desired-state reconciliation
-
-## Planned
-
-**September 2 – September 12, 2026**
-
-- Swarm scaling
-- Overlay networking
-- Second node
-- Multi-node scheduling
-- Failure recovery
-- Stateful workloads
-- Rolling deployments
-- Registry
-- CI/CD
-- Ingress
-- Security
-- Observability
-
-**September 14 – September 16, 2026**
-
-- Destroy infrastructure
-- Rebuild from source control
-- Complete architecture documentation
-- Complete migration and operational runbooks
-- Package the project as a portfolio case study
-
----
-
-# What This Project Is Intended to Demonstrate
-
-By completion, this repository should demonstrate the ability to:
-
-- Provision reproducible cloud infrastructure
-- Configure Linux systems safely
-- Harden remote administrative access
-- Understand Docker runtime behavior
-- Troubleshoot container networking
-- Migrate independent Compose workloads toward orchestration
-- Build and operate a multi-node container platform
-- Design for failure
-- Perform rolling deployments
-- Automate application delivery
-- Introduce operational visibility
-- Understand stateful versus stateless workload constraints
-- Document platform architecture and recovery procedures
-
-The end goal is not simply:
-
-```text
-"I know Terraform, Ansible and Docker."
-```
+> Can this create infrastructure?
 
 It is:
 
-> **Given a small production environment with containerized applications, I can audit the existing system, identify operational weaknesses, design a target architecture, automate the infrastructure, migrate workloads safely, test failure scenarios, and document how the platform is operated and recovered.**
+> Can the platform be destroyed and reconstructed without undocumented manual repair?
 
 ---
 
-## Status
+## Idempotency matters after the rebuild
 
-🚧 **Active development**
+A platform also needs to survive repeated reconciliation without unnecessary mutation.
 
-This repository intentionally preserves the progression, experiments, failures and architectural decisions made while building the platform.
+The lab therefore validates both:
+
+```text
+clean-room reproducibility
+
+and
+
+operational idempotency
+```
+
+---
+
+# Project Objective
+
+This repository is a hands-on study of Platform Engineering fundamentals.
+
+It is intended to demonstrate the transition from:
+
+```text
+manual infrastructure
+        ↓
+repeatable infrastructure
+        ↓
+automated configuration
+        ↓
+orchestrated workloads
+        ↓
+controlled deployments
+        ↓
+failure-aware operation
+        ↓
+reproducible platform
+```
+
+The goal is not to present the lab as a finished enterprise platform.
+
+The goal is to demonstrate the engineering decisions, failure analysis, automation patterns and operational discipline required to build reliable platforms.
