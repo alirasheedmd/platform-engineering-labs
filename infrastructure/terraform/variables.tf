@@ -5,16 +5,21 @@ variable "region" {
 }
 
 variable "vpc_ip_range" {
-  description = "Private CIDR range for the platform VPC"
+  description = "Private CIDR range for the Kubernetes platform VPC"
   type        = string
-  default     = "10.10.10.0/24"
+  default     = "10.20.0.0/24"
 }
-variable "droplet_size" {
-  description = "DigitalOcean Droplet size used by the initial platform node"
+variable "control_plane_size" {
+  description = "DigitalOcean Droplet size for the Kubernetes control-plane node"
   type        = string
-  default     = "s-1vcpu-1gb"
+  default     = "s-2vcpu-2gb"
 }
 
+variable "worker_size" {
+  description = "DigitalOcean Droplet size for Kubernetes worker nodes"
+  type        = string
+  default     = "s-2vcpu-2gb"
+}
 variable "droplet_image" {
   description = "Operating system image for platform nodes"
   type        = string

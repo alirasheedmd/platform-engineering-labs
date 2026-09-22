@@ -1,34 +1,36 @@
 resource "digitalocean_firewall" "platform" {
-  name = "platform-lab-firewall"
+  name = "platform-k8s-firewall"
 
   tags = [
     "platform-lab",
   ]
 
+  # Administrative SSH access from our trusted public IP only.
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
     source_addresses = [var.ssh_allowed_cidr]
   }
 
+  # Kubernetes API access from our trusted public IP.
   inbound_rule {
     protocol         = "tcp"
-    port_range       = "80"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+    port_range       = "6443"
+    source_addresses = [var.ssh_allowed_cidr]
   }
 
+  # Kubernetes nodes communicate with the API server over the private VPC.
   inbound_rule {
     protocol         = "tcp"
-    port_range       = "443"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+    port_range       = "6443"
+    source_addresses = [var.vpc_ip_range]
   }
 
-  # WireGuard VPN for GitHub Actions deployment access
-
+  # Kubelet API communication inside the cluster.
   inbound_rule {
-    protocol         = "udp"
-    port_range       = "51820"
-    source_addresses = ["0.0.0.0/0", "::/0"]
+    protocol         = "tcp"
+    port_range       = "10250"
+    source_addresses = [var.vpc_ip_range]
   }
 
   outbound_rule {
@@ -46,31 +48,5 @@ resource "digitalocean_firewall" "platform" {
   outbound_rule {
     protocol              = "icmp"
     destination_addresses = ["0.0.0.0/0", "::/0"]
-  }
-  # Swarm manager/control-plane communication
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "2377"
-    source_addresses = ["10.10.10.0/24"]
-  }
-
-  # Swarm node discovery / gossip
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "7946"
-    source_addresses = ["10.10.10.0/24"]
-  }
-
-  inbound_rule {
-    protocol         = "udp"
-    port_range       = "7946"
-    source_addresses = ["10.10.10.0/24"]
-  }
-
-  # Overlay network VXLAN
-  inbound_rule {
-    protocol         = "udp"
-    port_range       = "4789"
-    source_addresses = ["10.10.10.0/24"]
   }
 }
