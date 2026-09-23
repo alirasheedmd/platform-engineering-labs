@@ -1,0 +1,8 @@
+---
+- name: Bootstrap Kubernetes platform nodes
+  hosts: k8s_nodes
+  become: true
+
+  roles:
+    - common
+    - ssh_hardening

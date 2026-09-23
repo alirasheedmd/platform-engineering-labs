@@ -1,0 +1,6 @@
+---
+kubernetes_version: "v1.37.0"
+
+kubernetes_service_subnet: "10.96.0.0/12"
+kubernetes_pod_subnet: "10.244.0.0/16"
+kubernetes_dns_domain: "cluster.local"
