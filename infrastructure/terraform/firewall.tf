@@ -18,7 +18,11 @@ resource "digitalocean_firewall" "platform" {
     port_range       = "6443"
     source_addresses = [var.ssh_allowed_cidr]
   }
-
+  inbound_rule {
+    protocol         = "udp"
+    port_range       = "8472"
+    source_addresses = ["10.20.0.0/24"]
+  }
   # Kubernetes nodes communicate with the API server over the private VPC.
   inbound_rule {
     protocol         = "tcp"
@@ -50,3 +54,4 @@ resource "digitalocean_firewall" "platform" {
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 }
+
