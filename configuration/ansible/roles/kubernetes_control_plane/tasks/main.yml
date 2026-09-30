@@ -19,11 +19,30 @@
   ansible.builtin.command:
     cmd: kubeadm config validate --config /etc/kubernetes/kubeadm-init.yaml
   changed_when: false
+
 - name: Run kubeadm control-plane preflight checks
   ansible.builtin.command:
     cmd: kubeadm init phase preflight --config /etc/kubernetes/kubeadm-init.yaml
   changed_when: false
+
 - name: Initialize Kubernetes control plane
   ansible.builtin.command:
     cmd: kubeadm init --config /etc/kubernetes/kubeadm-init.yaml
     creates: /etc/kubernetes/admin.conf
+
+- name: Ensure platform kubeconfig directory exists
+  ansible.builtin.file:
+    path: /home/platform/.kube
+    state: directory
+    owner: platform
+    group: platform
+    mode: "0700"
+
+- name: Configure kubectl for platform user
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/platform/.kube/config
+    remote_src: true
+    owner: platform
+    group: platform
+    mode: "0600"
