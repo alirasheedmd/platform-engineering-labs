@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+
+metadata:
+  name: lab-web
+
+spec:
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: lab-web
+
+  template:
+    metadata:
+      labels:
+        app: lab-web
+
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+
+      containers:
+        - name: lab-web
+          image: ghcr.io/alirasheedmd/platform-lab-web:v1.1.0
+          ports:
+            - containerPort: 80

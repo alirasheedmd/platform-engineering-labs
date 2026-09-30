@@ -73,9 +73,9 @@ The final proof is simple:
 
 **Phase 2 Start:** September 21, 2026  
 **Last Updated:** September 30, 2026  
-**Current Milestone:** Stage 2.8 — ReplicaSet
+**Current Milestone:** Stage 2.9 — Deployment
 
-> The original target dates are preserved so the roadmap reflects the real engineering timeline. The revised dates below are the working schedule after time was diverted to another project. Stages 2.5–2.7 were reported complete by September 30; their exact completion days were not recorded here.
+> The original target dates are preserved so the roadmap reflects the real engineering timeline. The revised dates below are the working schedule after time was diverted to another project. Stages 2.5–2.8 were reported complete by September 30; their exact completion days were not recorded here.
 
 | Stage | Milestone                            | Original Target | Revised / Actual Date         | Status         |
 | ----- | ------------------------------------ | --------------- | ----------------------------- | -------------- |
@@ -87,7 +87,7 @@ The final proof is simple:
 | 2.5   | Install the CNI                      | Sep 23, 2026    | Sep 28 target; complete by Sep 30 | ✅ Complete |
 | 2.6   | Join the Worker Node                 | Sep 23, 2026    | Sep 29 target; complete by Sep 30 | ✅ Complete |
 | 2.7   | First Pod                            | Sep 24, 2026    | Sep 30 target; complete by Sep 30 | ✅ Complete |
-| 2.8   | ReplicaSet                           | Sep 24, 2026    | Sep 30, 2026 — Revised Target | ⬜ Planned     |
+| 2.8   | ReplicaSet                           | Sep 24, 2026    | Sep 30 target; complete by Sep 30 | ✅ Complete |
 | 2.9   | Deployment                           | Sep 24, 2026    | Oct 1, 2026 — Revised Target  | ⬜ Planned     |
 | 2.10  | Scaling and Reconciliation           | Sep 25, 2026    | Oct 2, 2026 — Revised Target  | ⬜ Planned     |
 | 2.11  | Services                             | Sep 25, 2026    | Oct 3, 2026 — Revised Target  | ⬜ Planned     |
@@ -866,13 +866,16 @@ Understand why production application workloads should generally not be modeled 
 
 **Original Target:** September 24, 2026  
 **Revised Target:** September 30, 2026  
-**Status:** ⬜ Planned
+**Actual Completion:** By September 30, 2026 (exact day not recorded)  
+**Status:** ✅ Complete
 
 ## Objective
 
 Understand replica reconciliation.
 
 Create a ReplicaSet for `lab-web`.
+
+Manifest: `configuration/kubernetes/lab-web/replicaset.yaml`.
 
 Desired state:
 
