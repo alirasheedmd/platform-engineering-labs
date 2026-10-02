@@ -72,10 +72,10 @@ The final proof is simple:
 # Phase 2 Milestone Calendar
 
 **Phase 2 Start:** September 21, 2026  
-**Last Updated:** September 30, 2026  
-**Current Milestone:** Stage 2.9 — Deployment
+**Last Updated:** October 2, 2026\
+**Current Milestone:** Stage 2.10 — Scaling and Reconciliation
 
-> The original target dates are preserved so the roadmap reflects the real engineering timeline. The revised dates below are the working schedule after time was diverted to another project. Stages 2.5–2.8 were reported complete by September 30; their exact completion days were not recorded here.
+> The original target dates are preserved so the roadmap reflects the real engineering timeline. The revised dates below are the working schedule after time was diverted to another project. Stages 2.5–2.8 were reported complete by September 30; their exact completion days were not recorded here. Stage 2.9 was reported complete by October 2; its exact completion day was not recorded here.
 
 | Stage | Milestone                            | Original Target | Revised / Actual Date         | Status         |
 | ----- | ------------------------------------ | --------------- | ----------------------------- | -------------- |
@@ -88,7 +88,7 @@ The final proof is simple:
 | 2.6   | Join the Worker Node                 | Sep 23, 2026    | Sep 29 target; complete by Sep 30 | ✅ Complete |
 | 2.7   | First Pod                            | Sep 24, 2026    | Sep 30 target; complete by Sep 30 | ✅ Complete |
 | 2.8   | ReplicaSet                           | Sep 24, 2026    | Sep 30 target; complete by Sep 30 | ✅ Complete |
-| 2.9   | Deployment                           | Sep 24, 2026    | Oct 1, 2026 — Revised Target  | ⬜ Planned     |
+| 2.9   | Deployment                           | Sep 24, 2026    | Oct 1 target; complete by Oct 2 | ✅ Complete |
 | 2.10  | Scaling and Reconciliation           | Sep 25, 2026    | Oct 2, 2026 — Revised Target  | ⬜ Planned     |
 | 2.11  | Services                             | Sep 25, 2026    | Oct 3, 2026 — Revised Target  | ⬜ Planned     |
 | 2.12  | Kubernetes DNS and Networking        | Sep 26, 2026    | Oct 4, 2026 — Revised Target  | ⬜ Planned     |
@@ -923,7 +923,10 @@ Be able to explain:
 
 **Original Target:** September 24, 2026  
 **Revised Target:** October 1, 2026  
-**Status:** ⬜ Planned
+**Actual Completion:** By October 2, 2026 (exact day not recorded)\
+**Status:** ✅ Complete
+
+Repository artifact: `configuration/kubernetes/lab-web/deployment.yaml` defines the `lab-web` Deployment with three replicas.
 
 ## Objective
 
